@@ -11,6 +11,11 @@ from routers import guarda_custodia
 from routers import pension_alimenticia
 from routers import reconocimiento
 from routers import historial
+from database import Base, engine
+import models
+
+Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI()
 # Crear las tablas definidas en models.py
@@ -23,7 +28,10 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+    "https://famlex-frontend.vercel.app"
+],
+
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
