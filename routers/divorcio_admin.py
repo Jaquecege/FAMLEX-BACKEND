@@ -1,19 +1,13 @@
-#divorcio_admin.py
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from fastapi import APIRouter, Form
-from fastapi.responses import FileResponse
-from fastapi import Depends
+from fastapi import APIRouter, Form, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Documento
-from routers.auth import obtener_usuario_actual 
-import os
-import locale
+from routers.auth import obtener_usuario_actual
+from io import BytesIO
 import datetime
-
-
 
 router = APIRouter()
 
@@ -26,9 +20,7 @@ async def generar_divorcio_admin(
     regimenadm: str = Form(...),
     usuario=Depends(obtener_usuario_actual),
     db: Session = Depends(get_db)
-
 ):
-    locale.setlocale(locale.LC_TIME, 'es_MX.UTF-8')  # español de México
     fecha = datetime.datetime.now().strftime("%d de %B de %Y")
     ciudad = "Ciudad de México"
     doc = Document()
@@ -53,7 +45,6 @@ async def generar_divorcio_admin(
         f"Que por medio del presente escrito, y con fundamento en el artículo 272 del Código Civil para la Ciudad de México, venimos a solicitar de manera conjunta y de común acuerdo "
         f"el divorcio por la vía administrativa, conforme a los siguientes:\n"
     )
-    
 
     doc.add_heading("H E C H O S", level=1)
     doc.add_paragraph(f"1. Con fecha {fecha_matrimonio}, contrajimos matrimonio civil ante la autoridad correspondiente en la Ciudad de México, lo cual se acredita con el acta de matrimonio que anexamos al presente escrito.")
@@ -67,8 +58,8 @@ async def generar_divorcio_admin(
         doc.add_paragraph("6. Nuestro matrimonio se celebró bajo el régimen de separación de bienes.")
 
     doc.add_heading("D E R E C H O", level=1)
-    doc.add_paragraph( "En cuanto al fondo del presente asunto, resulta aplicable el artículo 272 del Código Civil para la Ciudad de México, así como las disposiciones relativas al divorcio administrativo establecidas en la legislación civil vigente." )
-    doc.add_paragraph( "El procedimiento se tramita ante el C. Juez del Registro Civil, conforme a las formalidades establecidas en el mencionado numeral y demás correlativos aplicables.")
+    doc.add_paragraph("En cuanto al fondo del presente asunto, resulta aplicable el artículo 272 del Código Civil para la Ciudad de México, así como las disposiciones relativas al divorcio administrativo establecidas en la legislación civil vigente.")
+    doc.add_paragraph("El procedimiento se tramita ante el C. Juez del Registro Civil, conforme a las formalidades establecidas en el mencionado numeral y demás correlativos aplicables.")
 
     doc.add_heading("P E T I C I O N E S", level=1)
     doc.add_paragraph(
@@ -85,7 +76,7 @@ async def generar_divorcio_admin(
         f"_________________________________\n{promovente.upper()}\n\n"
         f"_________________________________\n{conyuge.upper()}"
     )
-   
+
     excluir_justificacion = [
         "JUICIO: DIVORCIO ADMINISTRATIVO",
         "C. JUEZ DEL REGISTRO CIVIL DE LA CIUDAD DE MÉXICO.",
@@ -93,28 +84,17 @@ async def generar_divorcio_admin(
         "PROTESTAMOS LO NECESARIO."
     ]
 
-        # Justificar todos los párrafos excepto los 3 primeros
     for p in doc.paragraphs:
         if not any(clave in p.text for clave in excluir_justificacion):
             p.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
 
-    # Guardar el documento y devolverlo como archivo .docx
+    # Generar documento en memoria
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
     nombre_archivo = f"Divorcio_Administrativo_{promovente.replace(' ', '_')}.docx"
-    doc.save(nombre_archivo)
 
-
-    # Opcional: guardar en carpeta por usuario
-    carpeta_usuario = f"documentos_usuario/{usuario.id}"
-    os.makedirs(carpeta_usuario, exist_ok=True)
-    ruta_completa = os.path.join(carpeta_usuario, nombre_archivo)
-    doc.save(ruta_completa)
-
-    nuevo_doc = Documento(
-        usuario_id=usuario.id,
-        nombre=nombre_archivo,
-        ruta=ruta_completa
+    return StreamingResponse(buffer,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
     )
-    db.add(nuevo_doc)
-    db.commit()
-
-    return FileResponse(ruta_completa, filename=nombre_archivo, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
